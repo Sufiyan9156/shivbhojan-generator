@@ -70,7 +70,7 @@ def get_or_create_today_folder(service):
 def download_random_reference(service):
     query = f"'{REFERENCE_FOLDER_ID}' in parents and (mimeType = 'image/jpeg' or mimeType = 'image/png') and trashed = false"
     results = service.files().list(q=query, fields="files(id, name)").execute()
-    items = results.get('files', [])
+    items = items = results.get('files', [])
     
     if not items:
         raise Exception("Drive Error: REFERENCES folder is empty or not accessible!")
@@ -148,25 +148,15 @@ def main():
             
             logging.info("Querying Gemini vision model for background preservation map...")
             
-            # Smart Fallback System to tackle Google's 404 Endpoint issues
-            ai_generated_prompt = ""
-            model_names_to_try = ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro-vision']
+            # FIXED GLOBAL ENDPOINT FOR 2026 PLATFORMS
+            model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                generation_config={"response_mime_type": "text/plain"}
+            )
             
-            for model_name in model_names_to_try:
-                try:
-                    logging.info(f"Attempting API call with endpoint: {model_name}")
-                    model = genai.GenerativeModel(model_name)
-                    response = model.generate_content([structured_prompt, image_payload])
-                    ai_generated_prompt = response.text.strip()
-                    if ai_generated_prompt:
-                        logging.info(f"Success with model: {model_name}")
-                        break
-                except Exception as model_err:
-                    logging.warning(f"Model {model_name} failed or gave 404. Trying next...")
-                    continue
-            
-            if not ai_generated_prompt:
-                raise Exception("All available Gemini Vision models failed to respond (404/Routing issues).")
+            # Using clean direct generation context
+            response = model.generate_content([structured_prompt, image_payload])
+            ai_generated_prompt = response.text.strip()
             
             if ai_generated_prompt.startswith("```"):
                 ai_generated_prompt = ai_generated_prompt.replace("```text", "").replace("```", "").strip()
