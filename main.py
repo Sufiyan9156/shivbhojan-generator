@@ -95,13 +95,12 @@ def generate_new_image(prompt_text):
     else:
         raise Exception(f"Flux Engine failed: {response.status_code}")
 
-# BYPASS FUNCTION: Direct raw REST endpoint call without google packages
+# FIXED BYPASS: Correct Model Network Architecture URL Path Mapping
 def call_gemini_via_rest(api_key, image_bytes, prompt_text):
-    # Forcing standard stable v1 production API endpoint path to strictly block the v1beta redirection error
+    # Model canonical path included in the URL to block any auto routing error
     url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     base64_image = base64.b64encode(image_bytes).decode('utf-8')
-    
     headers = {'Content-Type': 'application/json'}
     
     payload = {
