@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 REFERENCE_FOLDER_ID = os.getenv("REFERENCE_FOLDER_ID")
 OUTPUT_FOLDER_ID = os.getenv("OUTPUT_FOLDER_ID")
 SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-HF_TOKEN = os.getenv("HF_TOKEN")  # Free Hugging Face Token
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 CHARACTERS = [
     "an elderly Maharashtrian farmer with a deeply wrinkled weathered face, silver hair, and a white traditional Gandhi topi",
@@ -81,15 +81,12 @@ def download_random_reference(service):
     file_stream.seek(0)
     return file_stream.read(), random_file['name']
 
-# DEPLOYMENT FIX: Official Dedicated API Request Layer (No Limits, No 402)
+# BULLETPROOF REPLACEMENT: Direct Hugging Face Professional Inference API 
 def generate_new_image(prompt_text):
-    if not HF_TOKEN:
-        raise Exception("HF_TOKEN variable missing in Railway environment setup!")
-
-    logging.info("Routing prompt to Stable Diffusion Engine via HuggingFace Native API...")
+    logging.info("Routing prompt to Professional Hugging Face Stable Diffusion Engine...")
     
-    # Official stable production model endpoint
-    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    # Using high-speed stable diffusion pipeline via Hugging Face Infrastructure
+    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     payload = {"inputs": prompt_text, "options": {"wait_for_model": True}}
     
@@ -98,7 +95,11 @@ def generate_new_image(prompt_text):
     if response.status_code == 200:
         return response.content
     else:
-        raise Exception(f"HuggingFace engine failed with status {response.status_code}: {response.text}")
+        raise Exception(f"HuggingFace API Failed with status code {response.status_code}: {response.text}")
+
+def call_vision_api(image_bytes, target_character):
+    # Context prompt builder
+    return f"A raw smartphone documentary candid photo of {target_character} sitting in a local crowded Maharashtrian kitchen canteen, happily eating a simple traditional Shiv Bhojan meal consisting of dal, rice, hot chapati, and vegetable curry from a stainless steel partition thali plate, overhead indoor lighting, natural textures, 4k resolution."
 
 def main():
     logging.info("=== SHIV BHOJAN AI ENGINE SYSTEM STARTING ===")
@@ -114,15 +115,8 @@ def main():
             target_character = random.choice(CHARACTERS)
             logging.info(f"Targeting character: {target_character}")
             
-            # Pure descriptive direct layout string mapping
-            ai_generated_prompt = (
-                f"A raw realistic documentary photograph taken with a budget smartphone camera. "
-                f"Inside a crowded, simple government subsidized Indian canteen, sitting in front of a stainless steel partition thali plate is: {target_character}. "
-                f"The plate contains traditional food including dal, plain yellowish rice, a flat chapati, and local vegetable curry. "
-                f"The character is candidly captured mid-action, eating naturally. Overhead harsh fluorescent white tube lighting, "
-                f"natural skin textures, unedited realistic atmosphere, authentic scene."
-            )
-            logging.info("Context structure built successfully.")
+            ai_generated_prompt = call_vision_api(image_bytes, target_character)
+            logging.info(f"Compiled Prompt: '{ai_generated_prompt[:120]}...'")
             
             new_image_data = generate_new_image(ai_generated_prompt)
             active_folder_id = get_or_create_today_folder(service)
