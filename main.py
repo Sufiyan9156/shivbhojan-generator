@@ -41,7 +41,6 @@ def get_drive_service():
         creds = Credentials.from_service_account_info(
             creds_dict, scopes=["https://www.googleapis.com/auth/drive"]
         )
-        # Added cache_discovery=False to remove the oauth2client warning seen in your logs
         return build("drive", "v3", credentials=creds, cache_discovery=False)
     except Exception as e:
         logging.error(f"CRITICAL: Google Drive Auth Failed: {str(e)}")
@@ -142,16 +141,32 @@ def main():
                 f"OUTPUT INSTRUCTION: Reply ONLY with the final descriptive image prompt text. Do not add any conversational chat, explanations, introductory remarks, or markdown code blocks."
             )
             
-            # FIXED: Using 'gemini-1.5-flash-latest' to bypass the 404 endpoint routing issue
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')
             image_payload = {
                 'mime_type': 'image/jpeg',
                 'data': image_bytes
             }
             
             logging.info("Querying Gemini vision model for background preservation map...")
-            response = model.generate_content([structured_prompt, image_payload])
-            ai_generated_prompt = response.text.strip()
+            
+            # Smart Fallback System to tackle Google's 404 Endpoint issues
+            ai_generated_prompt = ""
+            model_names_to_try = ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro-vision']
+            
+            for model_name in model_names_to_try:
+                try:
+                    logging.info(f"Attempting API call with endpoint: {model_name}")
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content([structured_prompt, image_payload])
+                    ai_generated_prompt = response.text.strip()
+                    if ai_generated_prompt:
+                        logging.info(f"Success with model: {model_name}")
+                        break
+                except Exception as model_err:
+                    logging.warning(f"Model {model_name} failed or gave 404. Trying next...")
+                    continue
+            
+            if not ai_generated_prompt:
+                raise Exception("All available Gemini Vision models failed to respond (404/Routing issues).")
             
             if ai_generated_prompt.startswith("```"):
                 ai_generated_prompt = ai_generated_prompt.replace("```text", "").replace("```", "").strip()
