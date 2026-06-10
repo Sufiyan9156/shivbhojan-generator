@@ -41,17 +41,16 @@ def get_drive_service():
         creds = Credentials.from_service_account_info(
             creds_dict, scopes=["https://www.googleapis.com/auth/drive"]
         )
-        return build("drive", "v3", credentials=creds)
+        # Added cache_discovery=False to remove the oauth2client warning seen in your logs
+        return build("drive", "v3", credentials=creds, cache_discovery=False)
     except Exception as e:
         logging.error(f"CRITICAL: Google Drive Auth Failed: {str(e)}")
         raise e
 
 # --- DYNAMIC DATE FOLDER GENERATOR ---
 def get_or_create_today_folder(service):
-    # Format current date to match your pattern: "10 June 2026"
     today_str = datetime.now().strftime("%d %B %Y")
     
-    # Target validation under parent OUTPUT_FOLDER_ID
     query = f"name = '{today_str}' and '{OUTPUT_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     results = service.files().list(q=query, fields="files(id)").execute()
     items = results.get('files', [])
@@ -93,10 +92,8 @@ def download_random_reference(service):
 # --- ULTRAL-REALISTIC IMAGE GENERATION ENGINE (FLUX FLAVOR) ---
 def generate_new_image(prompt_text):
     logging.info("Routing prompt to high-fidelity photo engine...")
-    # URL Encoding to safely transmit the large text prompt
     encoded_prompt = requests.utils.quote(prompt_text)
     
-    # Adding Flux Pro parameters, fixed realistic frame, and micro-variations using a random seed
     seed = random.randint(100000, 999999)
     url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&model=flux&seed={seed}&nologo=true"
     
@@ -118,7 +115,6 @@ def main():
             cycle_counter += 1
             logging.info(f"--- Starting Active Cycle #{cycle_counter} ---")
             
-            # 1. API Multi-Key Load Balancer & Rotation
             if cycle_counter % 2 != 0:
                 current_key = GEMINI_KEY_1
                 key_label = "GEMINI_KEY_1"
@@ -129,10 +125,8 @@ def main():
             genai.configure(api_key=current_key)
             logging.info(f"Rotated key configuration context to: {key_label}")
             
-            # 2. Download Reference Data Stream
             image_bytes, original_filename = download_random_reference(service)
             
-            # 3. Dynamic Prompt Injection
             target_character = random.choice(CHARACTERS)
             logging.info(f"Targeting new subject character inject: {target_character}")
             
@@ -148,8 +142,8 @@ def main():
                 f"OUTPUT INSTRUCTION: Reply ONLY with the final descriptive image prompt text. Do not add any conversational chat, explanations, introductory remarks, or markdown code blocks."
             )
             
-            # 4. Invoke Gemini Vision Model to extract design specs
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # FIXED: Using 'gemini-1.5-flash-latest' to bypass the 404 endpoint routing issue
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
             image_payload = {
                 'mime_type': 'image/jpeg',
                 'data': image_bytes
@@ -159,19 +153,15 @@ def main():
             response = model.generate_content([structured_prompt, image_payload])
             ai_generated_prompt = response.text.strip()
             
-            # Safety Clean: Filter out any unwanted markdown formatting if Gemini mistakenly adds it
             if ai_generated_prompt.startswith("```"):
                 ai_generated_prompt = ai_generated_prompt.replace("```text", "").replace("```", "").strip()
                 
             logging.info(f"Successfully compiled Flux-Prompt: '{ai_generated_prompt[:120]}...'")
             
-            # 5. Process Image Generation
             new_image_data = generate_new_image(ai_generated_prompt)
             
-            # 6. Fetch Today's Dynamic Directory Path
             active_folder_id = get_or_create_today_folder(service)
             
-            # 7. Construct Filename & Push to Cloud
             current_timestamp = datetime.now().strftime("%H-%M-%S")
             final_filename = f"photo_{current_timestamp}.jpg"
             
@@ -198,7 +188,6 @@ def main():
             logging.error(f"FAIL: Error caught in active loop: {str(error)}")
             logging.info("Preserving process uptime. Safe-skipping directly to next cycle countdown.")
             
-        # 8. Fixed Interval Sleep Engine (150 Seconds = 2.5 Minutes)
         logging.info("Cycle complete. System cooling down for 150 seconds...")
         time.sleep(150)
 
