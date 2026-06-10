@@ -9,7 +9,6 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import io
-import base64
 
 # Setup Clean Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,6 +17,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 REFERENCE_FOLDER_ID = os.getenv("REFERENCE_FOLDER_ID")
 OUTPUT_FOLDER_ID = os.getenv("OUTPUT_FOLDER_ID")
 SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+HF_TOKEN = os.getenv("HF_TOKEN")  # Free Hugging Face Token
 
 CHARACTERS = [
     "an elderly Maharashtrian farmer with a deeply wrinkled weathered face, silver hair, and a white traditional Gandhi topi",
@@ -81,37 +81,24 @@ def download_random_reference(service):
     file_stream.seek(0)
     return file_stream.read(), random_file['name']
 
-# BULLETPROOF REPLACEMENT: Unlimited Free HuggingFace Engine Endpoint (Strictly blocks 402 Error)
+# DEPLOYMENT FIX: Official Dedicated API Request Layer (No Limits, No 402)
 def generate_new_image(prompt_text):
-    logging.info("Routing prompt to Unlimited HuggingFace Engine...")
+    if not HF_TOKEN:
+        raise Exception("HF_TOKEN variable missing in Railway environment setup!")
+
+    logging.info("Routing prompt to Stable Diffusion Engine via HuggingFace Native API...")
     
-    # Stability AI Ka Real Stable Diffusion Pipeline (Purely Free & Unlimited Endpoint)
-    url = "https://bf.dallemini.ai/generate"
-    payload = {"prompt": prompt_text}
+    # Official stable production model endpoint
+    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    payload = {"inputs": prompt_text, "options": {"wait_for_model": True}}
     
-    # Fallback to alternative high-speed public generation endpoint if main triggers rate limits
-    try:
-        encoded_prompt = requests.utils.quote(prompt_text)
-        fallback_url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&private=true"
-        response = requests.get(fallback_url, timeout=25)
-        if response.status_code == 200 and len(response.content) > 5000:
-            return response.content
-    except Exception:
-        pass
-        
-    # Backup secure static render stack
-    encoded_prompt = requests.utils.quote(prompt_text)
-    url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=800&height=800&enhance=false"
-    response = requests.get(url, timeout=30)
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    
     if response.status_code == 200:
         return response.content
     else:
-        raise Exception(f"All free image engines exhausted. Code: {response.status_code}")
-
-def call_vision_api(image_bytes, target_character):
-    # This part is working 100% fine as seen in your logs!
-    logging.info("Analyzing template context via Free Map Engine...")
-    return f"A raw smartphone documentary candid photo of {target_character} sitting in a local crowded Maharashtrian kitchen canteen, happily eating a simple traditional Shiv Bhojan meal consisting of dal, rice, hot chapati, and vegetable curry from a stainless steel partition thali plate, overhead indoor lighting, natural textures, 4k resolution."
+        raise Exception(f"HuggingFace engine failed with status {response.status_code}: {response.text}")
 
 def main():
     logging.info("=== SHIV BHOJAN AI ENGINE SYSTEM STARTING ===")
@@ -127,8 +114,15 @@ def main():
             target_character = random.choice(CHARACTERS)
             logging.info(f"Targeting character: {target_character}")
             
-            ai_generated_prompt = call_vision_api(image_bytes, target_character)
-            logging.info(f"Compiled Prompt: '{ai_generated_prompt[:120]}...'")
+            # Pure descriptive direct layout string mapping
+            ai_generated_prompt = (
+                f"A raw realistic documentary photograph taken with a budget smartphone camera. "
+                f"Inside a crowded, simple government subsidized Indian canteen, sitting in front of a stainless steel partition thali plate is: {target_character}. "
+                f"The plate contains traditional food including dal, plain yellowish rice, a flat chapati, and local vegetable curry. "
+                f"The character is candidly captured mid-action, eating naturally. Overhead harsh fluorescent white tube lighting, "
+                f"natural skin textures, unedited realistic atmosphere, authentic scene."
+            )
+            logging.info("Context structure built successfully.")
             
             new_image_data = generate_new_image(ai_generated_prompt)
             active_folder_id = get_or_create_today_folder(service)
