@@ -5,12 +5,11 @@ from datetime import datetime
 import json
 import logging
 import requests
-from google import genai
-from google.genai import types
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import io
+import base64
 
 # Setup Clean Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -96,6 +95,40 @@ def generate_new_image(prompt_text):
     else:
         raise Exception(f"Flux Engine failed: {response.status_code}")
 
+# BYPASS FUNCTION: Direct raw REST endpoint call without google packages
+def call_gemini_via_rest(api_key, image_bytes, prompt_text):
+    # Forcing standard stable v1 production API endpoint path to strictly block the v1beta redirection error
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    headers = {'Content-Type': 'application/json'}
+    
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt_text},
+                {
+                    "inlineData": {
+                        "mimeType": "image/jpeg",
+                        "data": base64_image
+                    }
+                }
+            ]
+        }]
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        res_json = response.json()
+        try:
+            return res_json['candidates'][0]['content']['parts'][0]['text']
+        except KeyError:
+            raise Exception(f"Unexpected JSON structure from Google: {res_json}")
+    else:
+        raise Exception(f"Direct Google REST endpoint failed with status {response.status_code}: {response.text}")
+
 def main():
     logging.info("=== SHIV BHOJAN AI ENGINE SYSTEM STARTING ===")
     service = get_drive_service()
@@ -106,12 +139,8 @@ def main():
             cycle_counter += 1
             logging.info(f"--- Starting Active Cycle #{cycle_counter} ---")
             
-            # API Key Selection
             current_key = GEMINI_KEY_1 if cycle_counter % 2 != 0 else GEMINI_KEY_2
             logging.info(f"Using GEMINI_KEY_{1 if cycle_counter % 2 != 0 else 2}")
-            
-            # Initialize New Client
-            client = genai.Client(api_key=current_key)
             
             image_bytes, original_filename = download_random_reference(service)
             target_character = random.choice(CHARACTERS)
@@ -129,21 +158,9 @@ def main():
                 f"OUTPUT INSTRUCTION: Reply ONLY with the final descriptive image prompt text. Do not add any conversational chat, explanations, introductory remarks, or markdown code blocks."
             )
             
-            logging.info("Querying Gemini via New Stable SDK...")
-            
-            # Using the absolute latest standard structure for image input
-            response = client.models.generate_content(
-                model='gemini-1.5-flash',
-                contents=[
-                    types.Part.from_bytes(
-                        data=image_bytes,
-                        mime_type='image/jpeg',
-                    ),
-                    structured_prompt
-                ]
-            )
-            
-            ai_generated_prompt = response.text.strip()
+            logging.info("Sending Direct Bypass Native Network Request to Google...")
+            ai_generated_prompt = call_gemini_via_rest(current_key, image_bytes, structured_prompt)
+            ai_generated_prompt = ai_generated_prompt.strip()
             
             if ai_generated_prompt.startswith("```"):
                 ai_generated_prompt = ai_generated_prompt.replace("```text", "").replace("```", "").strip()
